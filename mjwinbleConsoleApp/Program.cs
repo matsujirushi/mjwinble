@@ -15,6 +15,7 @@ using System.Text.RegularExpressions;
 using Windows.Foundation;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Devices.Bluetooth;
 using System.Runtime.InteropServices.WindowsRuntime;
 
 using matsujirushi.mjwinble;
@@ -40,19 +41,15 @@ namespace mjwinbleConsoleApp
             for (int i = 0; i < servicesInfo.Count; i++)
             {
                 var uuid = UuidFromDeviceInstanceId((string)servicesInfo[i].Properties["System.Devices.DeviceInstanceId"]);
-                Console.WriteLine("{0}. [{1}]", i + 1, uuid);
+                var uuidString = MjGattDeviceService.ServiceSpecificationNameFromServiceUuid(uuid);
+                Console.WriteLine("{0}. [{1}]", i + 1, uuidString);
             }
             Console.Write("Input: ");
             var serviceInfo = servicesInfo[int.Parse(Console.ReadLine()) - 1];
             Console.WriteLine();
 
             // GATTサービスインスタンスを取得します。
-            var result = GattDeviceService.FromIdAsync(serviceInfo.Id);
-            while (result.Status == AsyncStatus.Started)
-            {
-                System.Threading.Thread.Sleep(100);
-            }
-            var service = result.GetResults();
+            var service = GattDeviceServiceFromId(serviceInfo.Id);
 
             // Characteristicを取得します。
             var characteristics = service.GetCharacteristics(GattDeviceService.ConvertShortIdToUuid(0x2A19));   // Battery Level
@@ -60,14 +57,9 @@ namespace mjwinbleConsoleApp
             // Battery Level値を取得します。
             for (int i = 0; i < 10; i++)
             {
-                var result2 = characteristics[0].ReadValueAsync(Windows.Devices.Bluetooth.BluetoothCacheMode.Uncached);
-                while (result2.Status == AsyncStatus.Started)
-                {
-                    System.Threading.Thread.Sleep(100);
-                }
-                var crValue = result2.GetResults();
+                var val = GattCharacteristicReadValue(characteristics[0]);
 
-                Console.WriteLine("Battery Level = {0}", Windows.Storage.Streams.DataReader.FromBuffer(crValue.Value).ReadByte());
+                Console.WriteLine("Battery Level = {0}", Windows.Storage.Streams.DataReader.FromBuffer(val.Value).ReadByte());
             }
 
             Console.Write("Completed: ");
@@ -77,6 +69,28 @@ namespace mjwinbleConsoleApp
         private static DeviceInformationCollection DeviceInformationFindAll(string aqsFilter)
         {
             var result = DeviceInformation.FindAllAsync(aqsFilter, new string[] { "System.Devices.ContainerId", "System.Devices.InterfaceClassGuid" });
+            while (result.Status == AsyncStatus.Started)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+
+            return result.GetResults();
+        }
+
+        private static GattDeviceService GattDeviceServiceFromId(string id)
+        {
+            var result = GattDeviceService.FromIdAsync(id);
+            while (result.Status == AsyncStatus.Started)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+
+            return result.GetResults();
+        }
+
+        private static GattReadResult GattCharacteristicReadValue(GattCharacteristic characteristic)
+        {
+            var result = characteristic.ReadValueAsync(BluetoothCacheMode.Uncached);
             while (result.Status == AsyncStatus.Started)
             {
                 System.Threading.Thread.Sleep(100);
