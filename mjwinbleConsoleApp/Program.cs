@@ -15,6 +15,7 @@ using System.Text.RegularExpressions;
 using Windows.Foundation;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 using matsujirushi.mjwinble;
 
@@ -55,6 +56,19 @@ namespace mjwinbleConsoleApp
 
             // Characteristicを取得します。
             var characteristics = service.GetCharacteristics(GattDeviceService.ConvertShortIdToUuid(0x2A19));   // Battery Level
+
+            // Battery Level値を取得します。
+            for (int i = 0; i < 10; i++)
+            {
+                var result2 = characteristics[0].ReadValueAsync(Windows.Devices.Bluetooth.BluetoothCacheMode.Uncached);
+                while (result2.Status == AsyncStatus.Started)
+                {
+                    System.Threading.Thread.Sleep(100);
+                }
+                var crValue = result2.GetResults();
+
+                Console.WriteLine("Battery Level = {0}", Windows.Storage.Streams.DataReader.FromBuffer(crValue.Value).ReadByte());
+            }
 
             Console.Write("Completed: ");
             Console.ReadKey();
