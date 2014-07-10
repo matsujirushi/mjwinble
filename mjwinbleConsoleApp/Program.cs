@@ -16,7 +16,6 @@ using Windows.Foundation;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Bluetooth;
-using System.Runtime.InteropServices.WindowsRuntime;
 
 using matsujirushi.mjwinble;
 
@@ -26,23 +25,85 @@ namespace mjwinbleConsoleApp
     {
         static void Main(string[] args)
         {
-            // BluetoothLEデバイス一覧を表示します。
-            var devicesInfo = DeviceInformationFindAll(MjGattDeviceService.GetDeviceSelector());
-            for (int i = 0; i < devicesInfo.Count; i++)
-            {
-                Console.WriteLine("{0}. [{1}]", i + 1, devicesInfo[i].Name);
-            }
+            Console.WriteLine("1. Device List -> Service List");
+            Console.WriteLine("2. Service List");
+            Console.WriteLine("3. Battery Service Only");
             Console.Write("Input: ");
-            var deviceInfo = devicesInfo[int.Parse(Console.ReadLine()) - 1];
+            var workflow = int.Parse(Console.ReadLine());
             Console.WriteLine();
 
-            // GATTサービス一覧を表示します。
-            var servicesInfo = DeviceInformationFindAll(MjGattDeviceService.GetServiceSelector((Guid)deviceInfo.Properties["System.Devices.ContainerId"]));
+            DeviceInformationCollection servicesInfo;
+            switch (workflow)
+            {
+                case 1:
+                    {
+                        // BluetoothLEデバイス一覧を表示します。
+                        #region MjDeviceInformation.FindGattDevicesAsync()
+                        var devicesInfoResult = MjDeviceInformation.FindGattDevicesAsync();
+                        while (devicesInfoResult.Status == AsyncStatus.Started)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                        }
+                        var devicesInfo = devicesInfoResult.GetResults();
+                        for (int i = 0; i < devicesInfo.Count; i++)
+                        {
+                            Console.WriteLine("{0}. [{1}]", i + 1, devicesInfo[i].Name);
+                        }
+                        Console.Write("Input: ");
+                        var deviceInfo = devicesInfo[int.Parse(Console.ReadLine()) - 1];
+                        Console.WriteLine();
+                        #endregion
+
+                        // GATTサービス一覧を取得します。
+                        #region MjDeviceInformation.FindGattServicesAsync(deviceInfo)
+                        var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync(deviceInfo);
+                        while (servicesInfoResult.Status == AsyncStatus.Started)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                        }
+                        servicesInfo = servicesInfoResult.GetResults();
+                        #endregion
+                    }
+                    break;
+
+                case 2:
+                    {
+                        // GATTサービス一覧を取得します。
+                        #region MjDeviceInformation.FindGattServicesAsync()
+                        var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync();
+                        while (servicesInfoResult.Status == AsyncStatus.Started)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                        }
+                        servicesInfo = servicesInfoResult.GetResults();
+                        #endregion
+                    }
+                    break;
+
+                case 3:
+                    {
+                        // GATTサービス一覧を取得します。
+                        #region MjDeviceInformation.FindGattServicesAsync(0x180f)
+                        var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync(0x180f);
+                        while (servicesInfoResult.Status == AsyncStatus.Started)
+                        {
+                            System.Threading.Thread.Sleep(100);
+                        }
+                        servicesInfo = servicesInfoResult.GetResults();
+                        #endregion
+                    }
+                    break;
+
+                default:
+                    return;
+            }
+
+            // GATTサービスを選択します。
             for (int i = 0; i < servicesInfo.Count; i++)
             {
-                var uuid = UuidFromDeviceInstanceId((string)servicesInfo[i].Properties["System.Devices.DeviceInstanceId"]);
+                var uuid = MjGattDeviceService.UuidFromServiceInformation(servicesInfo[i]);
                 var uuidString = MjGattDeviceService.ServiceSpecificationNameFromServiceUuid(uuid);
-                Console.WriteLine("{0}. [{1}]", i + 1, uuidString);
+                Console.WriteLine("{0}. [{1}.{2}]", i + 1, servicesInfo[i].Name, uuidString);
             }
             Console.Write("Input: ");
             var serviceInfo = servicesInfo[int.Parse(Console.ReadLine()) - 1];
@@ -66,17 +127,6 @@ namespace mjwinbleConsoleApp
             Console.ReadKey();
         }
 
-        private static DeviceInformationCollection DeviceInformationFindAll(string aqsFilter)
-        {
-            var result = DeviceInformation.FindAllAsync(aqsFilter, new string[] { "System.Devices.ContainerId", "System.Devices.InterfaceClassGuid" });
-            while (result.Status == AsyncStatus.Started)
-            {
-                System.Threading.Thread.Sleep(100);
-            }
-
-            return result.GetResults();
-        }
-
         private static GattDeviceService GattDeviceServiceFromId(string id)
         {
             var result = GattDeviceService.FromIdAsync(id);
@@ -97,18 +147,6 @@ namespace mjwinbleConsoleApp
             }
 
             return result.GetResults();
-        }
-
-        private static Guid UuidFromDeviceInstanceId(string deviceInstanceId)
-        {
-            Regex regex = new Regex(@"^BTHLEDevice\\\{(.*)\}");
-            var match = regex.Match(deviceInstanceId);
-            if (!match.Success)
-            {
-                throw new ApplicationException();
-            }
-
-            return new Guid(match.Groups[1].Value);
         }
 
     }

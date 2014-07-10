@@ -4,9 +4,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+using System.Text.RegularExpressions;
+
+using Windows.Devices.Enumeration;
+
 namespace matsujirushi.mjwinble
 {
-    public class MjGattDeviceService
+    /// <summary>
+    /// BluetoothLEデバイス/GATTサービスのクラスです。
+    /// </summary>
+    public static class MjGattDeviceService
     {
         /// <summary>
         /// BluetoothLEデバイスのInterfaceClassGuid
@@ -69,34 +76,24 @@ namespace matsujirushi.mjwinble
                 case "0000181c-0000-1000-8000-00805f9b34fb":
                     return "User Data";
                 default:
-                    return uuid.ToString();;
+                    return uuid.ToString();
             }
         }
 
         /// <summary>
         /// BluetoothLEデバイスのAQS文字列を取得します。
         /// </summary>
-        /// <returns></returns>
-        public static string GetDeviceSelector()
+        /// <returns>AQS文字列</returns>
+        internal static string GetDeviceSelector()
         {
             return string.Concat("System.Devices.InterfaceClassGuid:=\"{", GUID_BLUETOOTHLE_DEVICE_INTERFACE.ToString(), "}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True");
         }
 
         /// <summary>
-        /// BluetoothLEデバイスのAQS文字列を取得します。
-        /// </summary>
-        /// <param name="containerId">ContainerId</param>
-        /// <returns></returns>
-        public static string GetDeviceSelector(Guid containerId)
-        {
-            return string.Concat("System.Devices.InterfaceClassGuid:=\"{", GUID_BLUETOOTHLE_DEVICE_INTERFACE.ToString(), "}\" AND System.Devices.ContainerId:=\"{", containerId.ToString(), "}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True");
-        }
-
-        /// <summary>
         /// GATTサービスのAQS文字列を取得します。
         /// </summary>
-        /// <returns></returns>
-        public static string GetServiceSelector()
+        /// <returns>AQS文字列</returns>
+        internal static string GetServiceSelector()
         {
             return string.Concat("System.Devices.InterfaceClassGuid:=\"{", GUID_BLUETOOTH_GATT_SERVICE_DEVICE_INTERFACE.ToString(), "}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True");
         }
@@ -104,11 +101,28 @@ namespace matsujirushi.mjwinble
         /// <summary>
         /// GATTサービスのAQS文字列を取得します。
         /// </summary>
-        /// <param name="containerId"></param>
-        /// <returns></returns>
-        public static string GetServiceSelector(Guid containerId)
+        /// <param name="containerId">System.Devices.ContainerId</param>
+        /// <returns>AQS文字列</returns>
+        internal static string GetServiceSelector(Guid containerId)
         {
             return string.Concat("System.Devices.InterfaceClassGuid:=\"{", GUID_BLUETOOTH_GATT_SERVICE_DEVICE_INTERFACE.ToString(), "}\" AND System.Devices.ContainerId:=\"{", containerId.ToString(), "}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True");
+        }
+
+        /// <summary>
+        /// GATTサービス情報からサービスUUIDを取得します。
+        /// </summary>
+        /// <param name="serviceInfo">GATTサービス情報</param>
+        /// <returns>サービスUUID</returns>
+        public static Guid UuidFromServiceInformation(DeviceInformation serviceInfo)
+        {
+            Regex regex = new Regex(@"^BTHLEDevice\\\{(.*)\}");
+            var match = regex.Match((string)serviceInfo.Properties["System.Devices.DeviceInstanceId"]);
+            if (!match.Success)
+            {
+                throw new ApplicationException();   // TODO
+            }
+
+            return new Guid(match.Groups[1].Value);
         }
 
     }
