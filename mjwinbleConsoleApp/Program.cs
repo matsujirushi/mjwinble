@@ -28,6 +28,7 @@ namespace mjwinbleConsoleApp
             Console.WriteLine("1. Device List -> Service List");
             Console.WriteLine("2. Service List");
             Console.WriteLine("3. Battery Service Only");
+            Console.WriteLine("4. Health Thermometer Service Only");
             Console.Write("Input: ");
             var workflow = int.Parse(Console.ReadLine());
             Console.WriteLine();
@@ -42,7 +43,7 @@ namespace mjwinbleConsoleApp
                         var devicesInfoResult = MjDeviceInformation.FindGattDevicesAsync();
                         while (devicesInfoResult.Status == AsyncStatus.Started)
                         {
-                            System.Threading.Thread.Sleep(100);
+                            System.Threading.Thread.Sleep(10);
                         }
                         var devicesInfo = devicesInfoResult.GetResults();
                         for (int i = 0; i < devicesInfo.Count; i++)
@@ -59,7 +60,7 @@ namespace mjwinbleConsoleApp
                         var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync(deviceInfo);
                         while (servicesInfoResult.Status == AsyncStatus.Started)
                         {
-                            System.Threading.Thread.Sleep(100);
+                            System.Threading.Thread.Sleep(10);
                         }
                         servicesInfo = servicesInfoResult.GetResults();
                         #endregion
@@ -73,7 +74,7 @@ namespace mjwinbleConsoleApp
                         var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync();
                         while (servicesInfoResult.Status == AsyncStatus.Started)
                         {
-                            System.Threading.Thread.Sleep(100);
+                            System.Threading.Thread.Sleep(10);
                         }
                         servicesInfo = servicesInfoResult.GetResults();
                         #endregion
@@ -87,7 +88,21 @@ namespace mjwinbleConsoleApp
                         var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync(0x180f);
                         while (servicesInfoResult.Status == AsyncStatus.Started)
                         {
-                            System.Threading.Thread.Sleep(100);
+                            System.Threading.Thread.Sleep(10);
+                        }
+                        servicesInfo = servicesInfoResult.GetResults();
+                        #endregion
+                    }
+                    break;
+
+                case 4:
+                    {
+                        // GATTサービス一覧を取得します。
+                        #region MjDeviceInformation.FindGattServicesAsync(0x1809)
+                        var servicesInfoResult = MjDeviceInformation.FindGattServicesAsync(0x1809);
+                        while (servicesInfoResult.Status == AsyncStatus.Started)
+                        {
+                            System.Threading.Thread.Sleep(10);
                         }
                         servicesInfo = servicesInfoResult.GetResults();
                         #endregion
@@ -112,19 +127,47 @@ namespace mjwinbleConsoleApp
             // GATTサービスインスタンスを取得します。
             var service = GattDeviceServiceFromId(serviceInfo.Id);
 
-            // Characteristicを取得します。
-            var characteristics = service.GetCharacteristics(GattDeviceService.ConvertShortIdToUuid(0x2A19));   // Battery Level
-
-            // Battery Level値を取得します。
-            for (int i = 0; i < 10; i++)
+            // Battery Service?
+            if (service.Uuid == GattDeviceService.ConvertShortIdToUuid(0x180f))
             {
-                var val = GattCharacteristicReadValue(characteristics[0]);
+                // Battery Level
+                var characteristics = service.GetCharacteristics(GattDeviceService.ConvertShortIdToUuid(0x2a19));
+                if ((characteristics[0].CharacteristicProperties & GattCharacteristicProperties.Notify) != 0)
+                {
+                    characteristics[0].ValueChanged += BatteryLevelChanged;
+                    characteristics[0].WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Notify);      // TODO
+                }
+            }
+            // Health Thermometer Service?
+            else if (service.Uuid == GattDeviceService.ConvertShortIdToUuid(0x1809))
+            {
+                // Temperature Measurement
+                var characteristics = service.GetCharacteristics(GattDeviceService.ConvertShortIdToUuid(0x2a1c));
 
-                Console.WriteLine("Battery Level = {0}", Windows.Storage.Streams.DataReader.FromBuffer(val.Value).ReadByte());
+                if ((characteristics[0].CharacteristicProperties & GattCharacteristicProperties.Indicate) != 0)
+                {
+                    characteristics[0].ValueChanged += TemperatureMeasurementChanged;
+                    characteristics[0].WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Indicate);    // TODO
+                }
             }
 
-            Console.Write("Completed: ");
+            Console.WriteLine("Hit any key to Quit.");
+            Console.WriteLine();
             Console.ReadKey();
+        }
+
+        static void BatteryLevelChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        {
+            var reader = Windows.Storage.Streams.DataReader.FromBuffer(args.CharacteristicValue);
+            Console.WriteLine("{0} = {1}", sender.Uuid, reader.ReadByte());
+        }
+
+        static void TemperatureMeasurementChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        {
+            var temperatureData = new byte[args.CharacteristicValue.Length];
+            Windows.Storage.Streams.DataReader.FromBuffer(args.CharacteristicValue).ReadBytes(temperatureData);
+            var temperature = ConvertTemperatureData(temperatureData);
+            Console.WriteLine("{0} = {1:f1}", sender.Uuid, temperature);
         }
 
         private static GattDeviceService GattDeviceServiceFromId(string id)
@@ -132,7 +175,7 @@ namespace mjwinbleConsoleApp
             var result = GattDeviceService.FromIdAsync(id);
             while (result.Status == AsyncStatus.Started)
             {
-                System.Threading.Thread.Sleep(100);
+                System.Threading.Thread.Sleep(10);
             }
 
             return result.GetResults();
@@ -140,14 +183,23 @@ namespace mjwinbleConsoleApp
 
         private static GattReadResult GattCharacteristicReadValue(GattCharacteristic characteristic)
         {
-            var result = characteristic.ReadValueAsync(BluetoothCacheMode.Uncached);
+            var result = characteristic.ReadValueAsync(BluetoothCacheMode.Cached);
             while (result.Status == AsyncStatus.Started)
             {
-                System.Threading.Thread.Sleep(100);
+                System.Threading.Thread.Sleep(10);
             }
 
             return result.GetResults();
         }
 
+        private static double ConvertTemperatureData(byte[] temperatureData)
+        {
+            // Read temperature data in IEEE 11703 floating point format 
+            // temperatureData[0] contains flags about optional data - not used 
+            uint mantissa = ((uint)temperatureData[3] << 16) | ((uint)temperatureData[2] << 8) | ((uint)temperatureData[1]);
+            int exponent = (sbyte)temperatureData[4];
+
+            return mantissa * Math.Pow(10.0, exponent);
+        }
     }
 }
